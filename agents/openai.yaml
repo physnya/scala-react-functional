@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scala + React 函数式课程规范"
+  short_description: "按课程规则设计、实现和审查 Scala + React 项目"
+  default_prompt: "Use $scala-react-functional-course to design or review this project for complete compliance with the course rules."
