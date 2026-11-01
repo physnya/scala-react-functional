@@ -1,6 +1,6 @@
 # Full-project compliance review
 
-Use this checklist for audits, large refactors, and final delivery. Read the backend and frontend references first when both sides are present.
+Use this checklist for audits, large refactors, and final delivery. Read `compliance-rules.md` plus the rule files and pattern references for both sides first. Each section names the rule numbers it verifies; quote those numbers in findings.
 
 ## 1. Establish the project map
 
@@ -11,67 +11,54 @@ Use this checklist for audits, large refactors, and final delivery. Read the bac
 
 ## 2. Search for functional-style violations
 
-Use searches as leads, then inspect context. Do not flag Scala `for` comprehensions that only compose effects.
+Run these searches with your agent's content-search tool when it has one (DSH `grep`, Claude Code `Grep`) or through the shell where it does not (Codex: `rg -n --glob '<include>' '<pattern>'`, falling back to `grep -rn`). All patterns below are ripgrep syntax. Inspect every hit in context: SQL, prose, and comments produce false positives.
 
-```bash
-rg -n --glob '*.scala' '\b(var|while)\b|scala\.collection\.mutable|unsafeRunSync|unsafeToFuture|\btry\b|\bcatch\b|\bfinally\b'
-rg -n --glob '*.{ts,tsx}' '\b(var|while|for)\b|\.push\(|\.splice\(|class .*extends React\.Component|class .*extends Component'
-rg -n --glob '*.tsx' 'style=\{|document\.|window\.'
-```
+- Scala: `\b(var|while)\b|scala\.collection\.mutable|unsafeRunSync|unsafeToFuture|\btry\b|\bcatch\b|\bfinally\b` (include `*.scala`).
+- TypeScript: `\b(var|while|for)\b|\.push\(|\.splice\(|class \w+ extends (React\.)?Component` (include `*.{ts,tsx}`).
+- TSX styling: `style=\{|document\.|window\.` (include `*.tsx`).
 
-Check every result. SQL text containing `for update` and prose containing these words are not programming violations.
+A Scala `for` comprehension that only composes effects is not a violation.
 
-## 3. Check backend structure
+## 3. Check backend ownership and routes (rules 1–12, 20–33)
 
-- All owned code is under `services/<domain>/` or `services/system/`.
-- Service directories use only the allowed folders unless an extra directory has a stated reason.
-- Every API operation is one `*Message.scala` file with a `final case class`, constructor inputs, one response type, and `plan(connection): IO[Response]`.
-- No forwarding-only service layer or redundant execution method exists.
-- Backend-only APIs are absent from route registration and have no unnecessary frontend caller.
-- Every service has one `XXRoutes`; the top router concatenates service lists.
-- Route names are derived, not repeated strings.
-- Token validation happens before trusted identity enters a business message.
+- All owned code sits under `services/<domain>/` or `services/system/`; any extra directory has a stated reason (rules 2–4).
+- Each API operation is one `*Message.scala` with a `final case class`, constructor inputs, one response type, and `plan(connection): IO[Response]`; no forwarding layer and no extra execution wrapper (rules 20–23).
+- API-specific types live under `objects/apiTypes/`; no empty request classes and no universal context injection (rules 24–27).
+- Each service has one `XXRoutes`; route names are derived from message types; backend-only messages are absent from registration and have no frontend caller (rules 31–33).
+- Token validation happens before a trusted `userId` enters a business message; frontend and backend shapes may differ intentionally at that boundary (rules 28–29).
 
-## 4. Check objects and states
+## 4. Check objects and states (rules 13–19)
 
-- Each meaningful object has one file and an adjacent companion.
-- Data structures are `final case class` with derived Circe codecs.
-- Enums centralize string conversion and codecs in companions.
-- Finite states use enums, sealed types, or discriminated unions with exhaustive handling.
-- Domain identifiers and states are not indistinguishable raw primitives.
-- Objects do not access databases, services, randomness, or stateful workflows.
-- API-specific response structures live under `objects/apiTypes/`.
+- Each meaningful object has one file with an adjacent companion; data structures are `final case class` with derived Circe codecs (rules 14–15).
+- Enums centralize string conversion and codecs in their companion; no redundant `toApi`/`fromDatabase` family (rules 17–18).
+- Finite states use enums, sealed types, or discriminated unions, and every branch makes omitted states visible (rules 19, 60).
+- Objects contain no database access, service calls, randomness, or stateful workflows (rule 13).
+- Imports are at the top of each file (rule 16).
 
-## 5. Check persistence and effects
+## 5. Check persistence and effects (rules 34–38)
 
-- Every table has its own folder, table file, and initializer file.
-- Each private `*Sql` value sits immediately before its public `IO[T]` method.
-- Public table methods encapsulate binding, execution, and mapping and do not accept arbitrary SQL.
-- Row mapping and table helpers are private. Service utilities use `private[serviceName] def`.
-- Table functions contain persistence mechanics, not multi-step business policy.
-- JDBC resources use `Resource`; no `try`/`finally`, mutable builder, or cursor `while` loop remains.
-- Effects are delayed in `IO`, composed explicitly, and executed only by the application runtime.
-- Related operations reuse the passed connection so transaction intent stays visible.
+- Every table has its own folder with a table file and an initializer file; initialization is not inside API files or one monolithic initializer (rules 34–35).
+- Each private `*Sql` value sits immediately before the public `IO[T]` method that executes it, and each table method encapsulates binding, execution, and row mapping (rules 36, 38).
+- No method accepts arbitrary SQL; row mapping and table helpers are private; service utilities use `private[serviceName] def` (rules 7–8).
+- Table functions hold persistence mechanics, not multi-step business policy (rule 37).
+- JDBC resources use `Resource`; no `try`/`finally`, mutable builder, or cursor `while` loop remains (rules 20–22).
+- Effects are delayed in `IO`, composed explicitly, and executed only by the application runtime; related operations reuse the passed connection (rule 22; `backend-scala.md`).
 
-## 6. Check frontend structure and data flow
+## 6. Check frontend structure and data flow (rules 39–47, 60)
 
-- `components/ui/` contains only broadly reusable primitives.
-- Page-only components, hooks, stores, objects, and pure functions stay beside the page.
-- Complex `index.tsx` files reveal the main business regions.
-- Nested page folders exist only where complexity pays for the lookup cost.
-- Core state is minimal and updated immutably. Display data is derived rather than duplicated.
-- Complex async pages model loading, ready, empty, error, and relevant operation states explicitly.
-- Pure functions do not call hooks or perform I/O. Components are function components.
-- Zustand stores are private and expose only needed `getXXXSnap`, `useXXX`, and `setXXX` functions.
-- Cross-page data uses route/location input unless it is genuinely persistent shared core state.
+- `components/ui/` contains only broadly reused primitives; page-only components, hooks, stores, objects, and pure functions stay beside their page (rules 39–40).
+- A complex `index.tsx` immediately reveals the main business regions; nested folders exist only where complexity pays for the lookup cost (rules 44–47).
+- Core state is minimal and updated immutably; display data is derived rather than duplicated; pure functions take explicit arguments and do not call hooks (rules 42, 60).
+- Complex async pages model loading, ready, empty, error, and relevant operation states explicitly; a simple form keeps small local states (rule 60).
+- Zustand stores are private and expose only needed `getXXXSnap`, `useXXX`, and `setXXX` functions (`frontend-react.md`).
+- Cross-page data uses route/location input unless it is genuinely persistent shared core state (`frontend-react.md`).
 
-## 7. Check frontend APIs and styling
+## 7. Check frontend APIs and styling (rules 48–58)
 
-- Frontend API folders match backend services where practical.
-- Each frontend-facing message has a corresponding API class with explicit fields and `send()`.
-- Shared infrastructure owns token handling, route-name derivation, sending, and common response handling.
-- Tailwind provides styling; custom CSS has a concrete necessity.
-- Unused scaffold files, assets, CSS, dependencies, and directories are removed.
+- Frontend API folders match backend services where practical; each frontend-facing message has one caller class with explicit fields and `send()` (rules 48–49, 52).
+- Shared infrastructure owns token handling, route-name derivation, sending, and common response handling (rules 50–51, 53).
+- Tailwind provides styling; custom CSS has a concrete necessity (rule 55).
+- Unused scaffold files, assets, CSS, dependencies, and directories are removed (rule 54).
 
 ## 8. Validate behavior
 
@@ -80,7 +67,7 @@ Run the project's existing formatter, compiler, type checker, tests, lint, and p
 Verify at least these flows when present:
 
 - Public API request and response serialization.
-- Token-protected request converting token to trusted identity.
+- Token-protected request converting a token to a trusted identity.
 - Authorization failure.
 - Table method returning present and absent results.
 - Transactional operation with multiple effects in order.
@@ -99,4 +86,4 @@ Why: <specific boundary or functional invariant violated>
 Fix: <smallest direct correction>
 ```
 
-Do not mix optional taste comments into the mandatory failure list. Do not claim complete compliance while known failures or unverified generated code remain.
+Close the review only when every touched rule has been checked, the validation commands above have run (or their absence is explained), and no unverified generated code remains. Keep optional taste comments out of the mandatory failure list; do not claim complete compliance while known failures remain.
