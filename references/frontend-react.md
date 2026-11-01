@@ -1,6 +1,6 @@
 # React frontend patterns
 
-Read this file for frontend design, implementation, refactoring, or review. The authoritative numbered rules remain in `compliance-rules.md`.
+Read this file for frontend design, implementation, refactoring, or review. The authoritative numbered rules for this side are 39–60 in `compliance-frontend.md`; cross-cutting and lecture interpretation rules are in `compliance-rules.md`.
 
 ## Functional React model
 

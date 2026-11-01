@@ -1,6 +1,6 @@
 # Scala backend patterns
 
-Read this file for backend design, implementation, refactoring, or review. The authoritative numbered rules remain in `compliance-rules.md`.
+Read this file for backend design, implementation, refactoring, or review. The authoritative numbered rules for this side are 1–38 in `compliance-backend.md`; cross-cutting and lecture interpretation rules are in `compliance-rules.md`.
 
 ## Required project shape
 
